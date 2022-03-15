@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+   <LongName>Search</LongName>
+   <ShortName>Search</ShortName>
+   <Description>Search the catalog.</Description>
+   <Developer>Tesseract</Developer>
+   <Contact>no@email.com</Contact>
+
+   <Url type="application/atom+xml"
+        template="/search?q={searchTerms}"/>
+
+   <Query role="example" searchTerms="shakespeare hamlet" />
+   <Query role="example" searchTerms="doyle detective" />
+   <Query role="example" searchTerms="love stories" />
+
+   <Attribution>Search Data</Attribution>
+   <SyndicationRight>open</SyndicationRight>
+   <Language>en-us</Language>
+   <OutputEncoding>UTF-8</OutputEncoding>
+   <InputEncoding>UTF-8</InputEncoding>
+</OpenSearchDescription>

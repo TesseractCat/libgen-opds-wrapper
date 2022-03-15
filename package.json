@@ -1,0 +1,17 @@
+{
+  "name": "opds-search",
+  "version": "0.1.0",
+  "description": "Simple OPDS search/downloader",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.26.1",
+    "express": "^4.17.3",
+    "jsdom": "^19.0.0",
+    "libgen": "^2.1.2"
+  }
+}

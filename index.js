@@ -87,14 +87,13 @@ function libgenDownload(url, callback) {
         for (let i = 0; i < links.length; i++) {
             // Download from cloudflare-ipfs
             if (links[i].href.includes("cloudflare-ipfs")) {
-                console.log(`Downloading URL ${links[i].href}`);
-
                 callback(links[i].href);
-                break;
+                return;
             }
         }
     }, () => {
         callback(null);
+        return;
     });
 }
 
@@ -128,6 +127,7 @@ app.get('/download', (req, res) => {
             res.type('application/xml');
             res.send(constructPage("OPDS Search - Error", entries));
         } else {
+            console.log(`Downloading URL ${fileUrl}`);
             // Download
             axios.get(fileUrl, {responseType: 'stream'}).then((downloadResponse) => {
                 downloadResponse.data.pipe(temp).on('close', () => {

@@ -172,11 +172,14 @@ app.get('/chapters', (req, res) => {
 
     axios.get(`http://localhost:${tachideskPort}/api/v1/manga/${manga}/chapters`).then((json) => {
         json.data.forEach((chapter) => {
+            let pageCount = parseInt(chapter.pageCount);
+            if (pageCount == -1)
+                pageCount = 99;
             entries.push(constructEntry(
                 chapter.name,
                 `/page?id=${manga}&amp;chapter=${chapter.index}&amp;page={pageNumber}&amp;width={maxWidth}`,
                 "http://vaemendis.net/opds-pse/stream", "",
-                parseInt(chapter.pageCount)
+                parseInt(pageCount)
             ));
         });
 
@@ -215,12 +218,19 @@ app.get('/page', (req, res) => {
     let chapter = req.query.chapter;
     let page = parseInt(req.query.page);
 
-    axios.get(`http://localhost:${tachideskPort}/api/v1/manga/${manga}/chapter/${chapter}/page/${page}`,
-        {responseType: 'arraybuffer'})
-        .then((image) => {
-        res.set('Last-Modified', new Date().toUTCString());
-        res.type('image/jpeg');
-        res.send(image.data);
+    axios.get(`http://localhost:${tachideskPort}/api/v1/manga/${manga}/chapter/${chapter}`).then((json) => {
+        let pageCount = json.data.pageCount;
+        if (page >= pageCount) {
+            res.sendStatus(404);
+            return;
+        }
+        axios.get(`http://localhost:${tachideskPort}/api/v1/manga/${manga}/chapter/${chapter}/page/${page}`,
+            {responseType: 'arraybuffer'})
+            .then((image) => {
+            res.set('Last-Modified', new Date().toUTCString());
+            res.type('image/jpeg');
+            res.send(image.data);
+        });
     });
 });
 

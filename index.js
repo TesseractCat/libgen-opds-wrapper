@@ -8,30 +8,37 @@ const express = require('express');
 const app = express();
 const port = 3000;
 
+const tachideskPort = 4567;
+
 const opdsEntryTemplate = `
 <entry>
     <author><name>{AUTHOR}</name></author>
     <title>{TITLE}</title>
     <link rel="{REL}"
           href="{URL}"
-          type="{TYPE}"/>
+          type="{TYPE}"
+          pse:count="{COUNT}" />
 </entry>
 `;
 
+const seperator = "⸻";
 const opdsTemplate = fs.readFileSync('./static/opds.xml').toString();
 const config = JSON.parse(fs.readFileSync('./config.json').toString());
 
-function constructEntry(title, url, rel = "subsection", author = "") {
+function constructEntry(title, url, rel = "subsection", author = "", count = 1) {
     var temp = opdsEntryTemplate;
     temp = temp.replace("{TITLE}", title);
     temp = temp.replace("{AUTHOR}", author);
     temp = temp.replace("{URL}", url);
     temp = temp.replace("{REL}", rel);
+    temp = temp.replace("{COUNT}", count);
 
     if (rel == "search") {
         temp = temp.replace("{TYPE}", "application/opensearchdescription+xml");
     } else if (rel == "http://opds-spec.org/acquisition") {
         temp = temp.replace("{TYPE}", "application/epub+zip");
+    } else if (rel == "http://vaemendis.net/opds-pse/stream") {
+        temp = temp.replace("{TYPE}", "image/jpeg");
     } else {
         temp = temp.replace("{TYPE}", "application/atom+xml;profile=opds-catalog;kind=acquisition");
     }
@@ -46,7 +53,7 @@ function constructPage(title, entries, showSearch = false) {
     return xml;
 }
 
-function searchResults(query, callback) {
+function libgenSearch(query, callback) {
     console.log(`Searching for ${query}`);
     let url = config.search + "?q=" + query + "&criteria=&language=English&format=epub";
     axios.get(url).then((response) => {
@@ -57,7 +64,7 @@ function searchResults(query, callback) {
         console.log(`Found ${links.length} results`);
 
         let results = [];
-        results.push({name: "—", url: "/"});
+        results.push({name: seperator, url: "/"});
         for (let i = 0; i < links.length; i++) {
             let md5 = links[i].href.replace('/fiction/','');
             let author = links[i].parentElement.parentElement.firstElementChild.textContent;
@@ -71,12 +78,32 @@ function searchResults(query, callback) {
         callback(results);
     });
 }
+function libgenDownload(url, callback) {
+    axios.get(url).then((tempResponse) => {
+        // Find URL
+        let dom = new JSDOM(tempResponse.data);
+        let links = dom.window.document.querySelectorAll("a");
+
+        for (let i = 0; i < links.length; i++) {
+            // Download from cloudflare-ipfs
+            if (links[i].href.includes("cloudflare-ipfs")) {
+                console.log(`Downloading URL ${links[i].href}`);
+
+                callback(links[i].href);
+                break;
+            }
+        }
+    }, () => {
+        callback(null);
+    });
+}
 
 /* API */
 
 app.get('/', (req, res) => {
     let entries = [];
     entries.push(constructEntry("Home", "/"));
+    entries.push(constructEntry("Manga", "/manga"));
 
     res.set('Last-Modified', new Date().toUTCString());
     res.type('application/xml');
@@ -91,45 +118,72 @@ app.get('/download', (req, res) => {
     console.log(`Visiting page ${url}`);
 
     const temp = fs.createWriteStream('./temp.epub');
-    // Get download page
-    axios.get(url).then((tempResponse) => {
-        // Find URL
-        let dom = new JSDOM(tempResponse.data);
-        let links = dom.window.document.querySelectorAll("a");
+    libgenDownload(url, (fileUrl) => {
+        if (fileUrl == null) {
+            // Can't download
+            let entries = [];
+            entries.push(constructEntry("No URL - back", "/"));
 
-        for (let i = 0; i < links.length; i++) {
-            // Download from cloudflare-ipfs
-            if (links[i].href.includes("cloudflare-ipfs")) {
-                console.log(`Downloading URL ${links[i].href}`);
-                // Download
-                axios.get(links[i].href, {responseType: 'stream'}).then((downloadResponse) => {
-                    downloadResponse.data.pipe(temp).on('close', () => {
-                        console.log(`Done downloading!`);
-                        res.sendFile(__dirname + '/temp.epub');
-                    });
+            res.set('Last-Modified', new Date().toUTCString());
+            res.type('application/xml');
+            res.send(constructPage("OPDS Search - Error", entries));
+        } else {
+            // Download
+            axios.get(fileUrl, {responseType: 'stream'}).then((downloadResponse) => {
+                downloadResponse.data.pipe(temp).on('close', () => {
+                    console.log(`Done downloading!`);
+                    res.sendFile(__dirname + '/temp.epub');
                 });
-                break;
-            }
+            });
         }
-    }, () => {
-        // Can't download
-        let entries = [];
-        entries.push(constructEntry("No URL - back", "/"));
-
-        res.set('Last-Modified', new Date().toUTCString());
-        res.type('application/xml');
-        res.send(constructPage("OPDS Search - Error", entries));
     });
 });
 
-app.get('/downloads', (req, res) => {
+app.get('/manga', (req, res) => {
     let entries = [];
     entries.push(constructEntry("Home", "/"));
-    entries.push(constructEntry("Refresh", "/downloads"));
+    entries.push(constructEntry(seperator, "/"));
 
-    res.set('Last-Modified', new Date().toUTCString());
-    res.type('application/xml');
-    res.send(constructPage("OPDS Search - Downloads", entries));
+    axios.get(`http://localhost:${tachideskPort}/api/v1/category/0`).then((json) => {
+        json.data.forEach((manga) => {
+            entries.push(constructEntry(manga.title, "/chapters?id=" + manga.id.toString()));
+        });
+
+        res.set('Last-Modified', new Date().toUTCString());
+        res.type('application/xml');
+        res.send(constructPage("OPDS Search - Manga", entries));
+    });
+});
+
+app.get('/chapters', (req, res) => {
+    let entries = [];
+    entries.push(constructEntry("Home", "/"));
+    entries.push(constructEntry("Back", "/manga"));
+    entries.push(constructEntry(seperator, "/"));
+
+    let manga = req.query.id;
+
+    //entries.push(constructEntry(
+    //    "Test Stream",
+    //    "/stream?id=test&amp;page={pageNumber}&amp;width={maxWidth}",
+    //    "http://vaemendis.net/opds-pse/stream", "",
+    //    10
+    //));
+
+    axios.get(`http://localhost:${tachideskPort}/api/v1/manga/${manga}/chapters`).then((json) => {
+        json.data.forEach((chapter) => {
+            entries.push(constructEntry(
+                chapter.name,
+                `/page?id=${manga}&amp;chapter=${chapter.index}&amp;page={pageNumber}&amp;width={maxWidth}`,
+                "http://vaemendis.net/opds-pse/stream", "",
+                parseInt(chapter.pageCount)
+            ));
+        });
+
+        res.set('Last-Modified', new Date().toUTCString());
+        res.type('application/xml');
+        res.send(constructPage("OPDS Search - Manga", entries));
+    });
 });
 
 app.get('/search', (req, res) => {
@@ -145,7 +199,7 @@ app.get('/search', (req, res) => {
         let entries = [];
         entries.push(constructEntry("Home", "/"));
 
-        searchResults(search, (results) => {
+        libgenSearch(search, (results) => {
             for (let i = 0; i < results.length; i++) {
                 let result = results[i];
                 entries.push(constructEntry(result.name, result.url, "http://opds-spec.org/acquisition", result.author));
@@ -154,6 +208,20 @@ app.get('/search', (req, res) => {
             res.send(constructPage("OPDS Search - Results", entries));
         });
     }
+});
+
+app.get('/page', (req, res) => {
+    let manga = req.query.id;
+    let chapter = req.query.chapter;
+    let page = parseInt(req.query.page);
+
+    axios.get(`http://localhost:${tachideskPort}/api/v1/manga/${manga}/chapter/${chapter}/page/${page}`,
+        {responseType: 'arraybuffer'})
+        .then((image) => {
+        res.set('Last-Modified', new Date().toUTCString());
+        res.type('image/jpeg');
+        res.send(image.data);
+    });
 });
 
 app.listen(port, () => {

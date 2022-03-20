@@ -7,9 +7,6 @@ const { JSDOM } = jsdom;
 
 const express = require('express');
 const app = express();
-const port = 3000;
-
-const tachideskPort = 4567;
 
 const opdsEntryTemplate = `
 <entry>
@@ -25,6 +22,9 @@ const opdsEntryTemplate = `
 const seperator = "⸻";
 const opdsTemplate = fs.readFileSync('./static/opds.xml').toString();
 const config = JSON.parse(fs.readFileSync('./config.json').toString());
+
+const port = config.port;
+const tachideskPort = config.tachideskPort;
 
 function constructEntry(title, url, rel = "subsection", author = "", count = 1) {
     var temp = opdsEntryTemplate;
@@ -187,7 +187,7 @@ app.get('/chapters', (req, res) => {
             if (pageCount == -1)
                 pageCount = 99;
             entries.push(constructEntry(
-                chapter.name,
+                chapter.name + " | " + new Date(chapter.uploadDate).toUTCString().slice(5,16),
                 `/page?id=${manga}&amp;chapter=${chapter.index}&amp;page={pageNumber}&amp;width={maxWidth}`,
                 "http://vaemendis.net/opds-pse/stream", "",
                 parseInt(pageCount)

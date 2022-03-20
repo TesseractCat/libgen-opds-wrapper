@@ -1,4 +1,6 @@
 {
     "search":"https://{Libgen Domain}/fiction/",
-    "download":"http://{Libgen Download Domain}/fiction/"
+    "download":"http://{Libgen Download Domain}/fiction/",
+    "port":3000,
+    "tachideskPort":4567
 }

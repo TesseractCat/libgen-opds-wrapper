@@ -187,7 +187,8 @@ app.get('/chapters', (req, res) => {
             if (pageCount == -1)
                 pageCount = 99;
             entries.push(constructEntry(
-                chapter.name + " | " + new Date(chapter.uploadDate).toUTCString().slice(5,16),
+                //chapter.name + " | " + new Date(chapter.uploadDate).toUTCString().slice(5,16),
+                new Date(chapter.uploadDate).toUTCString().slice(5,16) + " | " + chapter.name,
                 `/page?id=${manga}&amp;chapter=${chapter.index}&amp;page={pageNumber}&amp;width={maxWidth}`,
                 "http://vaemendis.net/opds-pse/stream", "",
                 parseInt(pageCount)

@@ -1,5 +1,6 @@
 const fs = require('fs');
 
+const FormData = require('form-data');
 const axios = require('axios').default;
 const jsdom = require('jsdom');
 const { JSDOM } = jsdom;
@@ -156,21 +157,31 @@ app.get('/manga', (req, res) => {
 });
 
 app.get('/chapters', (req, res) => {
+    let manga = req.query.id;
+
     let entries = [];
     entries.push(constructEntry("Home", "/"));
     entries.push(constructEntry("Back", "/manga"));
+    entries.push(constructEntry("Refresh", `/chapters?id=${manga}`));
     entries.push(constructEntry(seperator, "/"));
 
-    let manga = req.query.id;
-
-    //entries.push(constructEntry(
-    //    "Test Stream",
-    //    "/stream?id=test&amp;page={pageNumber}&amp;width={maxWidth}",
-    //    "http://vaemendis.net/opds-pse/stream", "",
-    //    10
-    //));
-
     axios.get(`http://localhost:${tachideskPort}/api/v1/manga/${manga}/chapters`).then((json) => {
+        let sortedChapters = [...json.data].filter(a => a.read).sort((a, b) => b.lastReadAt - a.lastReadAt);
+        let nextChapterIdx = sortedChapters.length > 0 ?
+            sortedChapters[0].index + 1 : json.data[json.data.length - 1].index;
+        let nextChapter = [...json.data].filter(a => a.index == nextChapterIdx)[0];
+
+        if (nextChapter != undefined) {
+            entries.push(constructEntry(
+                "Next: " + nextChapter.name,
+                `/page?id=${manga}&amp;chapter=${nextChapter.index}&amp;page={pageNumber}&amp;width={maxWidth}`,
+                "http://vaemendis.net/opds-pse/stream", "",
+                parseInt(nextChapter.pageCount) == -1 ? 99 : parseInt(nextChapter.pageCount)
+            ));
+
+            entries.push(constructEntry(seperator, "/"));
+        }
+
         json.data.forEach((chapter) => {
             let pageCount = parseInt(chapter.pageCount);
             if (pageCount == -1)
@@ -220,10 +231,21 @@ app.get('/page', (req, res) => {
 
     axios.get(`http://localhost:${tachideskPort}/api/v1/manga/${manga}/chapter/${chapter}`).then((json) => {
         let pageCount = json.data.pageCount;
+        let formData = new FormData();
+        formData.append('lastPageRead', page.toString());
+
         if (page >= pageCount) {
             res.sendStatus(404);
             return;
+        } else if (page == pageCount - 1) {
+            formData.append('read', 'true');
+            axios.patch(`http://localhost:${tachideskPort}/api/v1/manga/${manga}/chapter/${chapter}`,
+                formData, {headers: formData.getHeaders()});
+        } else {
+            axios.patch(`http://localhost:${tachideskPort}/api/v1/manga/${manga}/chapter/${chapter}`,
+                formData, {headers: formData.getHeaders()});
         }
+
         axios.get(`http://localhost:${tachideskPort}/api/v1/manga/${manga}/chapter/${chapter}/page/${page}`,
             {responseType: 'arraybuffer'})
             .then((image) => {
